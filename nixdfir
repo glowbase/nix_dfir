@@ -12,17 +12,6 @@ BOLD='\033[1m'
 BOLD_PINK='\033[1;35m'
 DIV="=============================="
 
-BANNER="
-██████╗ ███████╗ █████╗ ██████╗     ██████╗ ███████╗██╗██████╗ 
-██╔══██╗██╔════╝██╔══██╗██╔══██╗    ██╔══██╗██╔════╝██║██╔══██╗
-██║  ██║█████╗  ███████║██║  ██║    ██║  ██║█████╗  ██║██████╔╝
-██║  ██║██╔══╝  ██╔══██║██║  ██║    ██║  ██║██╔══╝  ██║██╔══██╗
-██████╔╝███████╗██║  ██║██████╔╝    ██████╔╝██║     ██║██║  ██║
-╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝     ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝
-
-Perform post-mortem analysis on 'dead' Linux machines.
-"
-
 OPTIONS=("MOUNT_POINT" "TIME_ZONE")
 SWITCHES=("-m")
 OPTION_IDX=0
@@ -296,8 +285,17 @@ mount_image() {
 # BANNER
 # -----------------------------------------------------------
 
-show_banner() {
-	echo "$BANNER"
+banner() {
+	echo
+	echo -e "\e[31m██████╗ ███████╗ █████╗ ██████╗     ██████╗ ███████╗██╗██████╗ \e[0m"
+    echo -e "\e[33m██╔══██╗██╔════╝██╔══██╗██╔══██╗    ██╔══██╗██╔════╝██║██╔══██╗\e[0m"
+    echo -e "\e[32m██║  ██║█████╗  ███████║██║  ██║    ██║  ██║█████╗  ██║██████╔╝\e[0m"
+    echo -e "\e[34m██║  ██║██╔══╝  ██╔══██║██║  ██║    ██║  ██║██╔══╝  ██║██╔══██╗\e[0m"
+    echo -e "\e[35m██████╔╝███████╗██║  ██║██████╔╝    ██████╔╝██║     ██║██║  ██║\e[0m"
+    echo -e "\e[36m╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝     ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝\e[0m"
+	echo
+	echo -e "${RED}Perform post-mortem analysis on 'dead' Linux machines.${RESET}"
+	echo
 }
 
 # -----------------------------------------------------------
@@ -426,12 +424,12 @@ get_installed_software() {
 	local dpkg="$MOUNT_POINT/var/log/dpkg.log"
 	local yum="$MOUNT_POINT/var/log/yum.log"
 
-	local software="wget|curl|php|sql|apache|drupal"
+	local software="wget|curl|php|sql|apache|drupal|ssh|nginx"
 
 	if [ -f "$dpkg" ]; then
-		echo "$(cat "$dpkg" | grep " installed " | egrep --color=always "$software" )"
+		echo "$(cat "$dpkg" | grep " installed " | egrep --color=always "$software|$" )"
 	elif [ -f "$yum" ]; then
-		echo "$(grep -i installed $yum | sed -e "s/Installed: //" | egrep --color=always "$software")"
+		echo "$(grep -i installed $yum | sed -e "s/Installed: //" | egrep --color=always "$software|$")"
 	else
 		echo "$(log_value "Could't find Installed Software..." "")"
 	fi
@@ -600,6 +598,27 @@ get_network() {
 		echo "Cannot find network configurations..."
 		echo
 	fi
+
+	# NetworkManager Connections - only lists a single interface, need to fix this
+	netman="$MOUNT_POINT/etc/NetworkManager/system-connections/*"
+	
+	if [ -f $netman ]; then
+		for config in $netman; do
+			local id=$(cat $netman | grep "^id=" | cut -d "=" -f 2)
+			local type=$(cat $netman | grep "^type=" | cut -d "=" -f 2)
+			local ip=$(cat $netman | grep "^address" | cut -d "=" -f 2 | cut -d "," -f 1)
+			local mac=$(cat $netman | grep "^mac-address=" | cut -d "=" -f 2)
+			local dns=$(cat $netman | grep "^dns=" | cut -d "=" -f 2 | sed 's/;//g')
+			local gateway=$(cat $netman | grep "^address" | cut -d "=" -f 2 | cut -d "," -f 2 )
+
+			echo -e "${BOLD_PINK}$id:${RESET}"
+			echo -e "  ${BOLD}Type:${RESET} $type"
+			echo -e "  ${BOLD}IP:${RESET} $ip"
+			echo -e "  ${BOLD}MAC:${RESET} $mac"
+			echo -e "  ${BOLD}DNS:${RESET} $dns"
+			echo -e "  ${BOLD}Gateway:${RESET} $gateway"
+		done
+	fi
 }
 
 # -----------------------------------------------------------
@@ -624,9 +643,9 @@ get_remote_sessions() {
 	echo
 
 	if [ -e $MOUNT_POINT/var/log/auth.log ]; then
-		output="$(egrep "session opened|session closed" $MOUNT_POINT/var/log/auth.log | awk '{print "state:", $8,"\t|\t", "user:", $11,"\t|\t", "timestamp: ", $1, $2, $3}' | tail)"
+		output="$(egrep "session opened|session closed" $MOUNT_POINT/var/log/auth.log)"
 	elif [ -e $MOUNT_POINT/var/log/secure ]; then
-		output="$(egrep "session opened|session closed" $MOUNT_POINT/var/log/secure | awk '{print "state:", $8,"\t|\t", "user:", $11,"\t|\t", "timestamp: ", $1, $2, $3}' | tail)"
+		output="$(egrep "session opened|session closed" $MOUNT_POINT/var/log/secure)"
 	else
 		output="Cannot find remote session information..."
 	fi
@@ -754,22 +773,35 @@ get_command_history() {
 		local shell=$(echo "${line}" | cut -d ":" -f 7 | egrep "(bash|zsh)")
 		local home="$(grep "^$user" $MOUNT_POINT/etc/passwd | cut -d ":" -f 6)"
 
-		if [[ $shell =~ "zsh" ]]; then
-			dir="$home/.zsh_history"
-		else
-			dir="$home/.bash_history"
-		fi
+		history="$(cat $MOUNT_POINT$home/.*history | egrep --color=always "$keywords|$")"
 
-		if [ -f "$dir" ]; then
-			history="$(cat $MOUNT_POINT$dir | egrep --color=always "$keywords|$")"
-		else
-			history="Cannot find history file..."
-		fi
-
-		echo -e "$(log_value "$user ($dir)" "")"
+		echo -e "$(log_value "$user ($shell)" "")"
 		echo "$history"
 		echo
 	done
+}
+
+# -----------------------------------------------------------
+# USER FILES
+# -----------------------------------------------------------
+get_user_files() {
+	echo $(log_header "USER FILES")
+	echo
+
+	local users=$(egrep "(bash|zsh)" $MOUNT_POINT/etc/passwd | tr -d ' ')
+
+	for line in $users; do
+		local user=$(echo "${line}" | cut -d ":" -f 1)
+		local home="$(grep "^$user" $MOUNT_POINT/etc/passwd | cut -d ":" -f 6)"
+
+		local files="$(ls -l $MOUNT_POINT$home/*)"
+
+		echo -e "$(log_value "$user ($home)" "")"
+		echo "$files"
+		echo
+	done
+
+	echo
 }
 
 # -----------------------------------------------------------
@@ -810,7 +842,7 @@ get_apache_config() {
 }
 
 execute_all() {
-	show_banner
+	banner
 
 	# if MOUNT_REQUIRED is set, mount the image
 	if [ $MOUNT_REQUIRED -eq 1 ]; then
@@ -821,6 +853,7 @@ execute_all() {
 	get_device_settings
 	get_users
 	get_command_history
+	get_user_files
 	get_temp_files
 	get_backup_diff
 	get_installed_software
