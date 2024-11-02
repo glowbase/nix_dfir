@@ -1,4 +1,4 @@
-# Dead DFIR
+# Nix DFIR
 Mount forensic disk images and perform baselining and post-mortem analysis on Linux machines. 
 
 ### Use
