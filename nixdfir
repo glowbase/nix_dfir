@@ -458,7 +458,7 @@ get_cron_jobs() {
 	echo $(log_header "CRON JOBS")
 	echo
 
-	local patterns="wget |curl |nc |bash |sh |base64|exec |/tmp/|perl|python|ruby|nmap |tftp|php"
+	local patterns="wget |curl |nc |bash |sh |base64|exec |/tmp/|perl|python|ruby|nmap |tftp|php|.py|/opt/"
 
 	local cron_files=(
 			"$MOUNT_POINT/etc/crontab"
@@ -747,7 +747,7 @@ get_web_logs() {
 		fi
 		echo
 
-		query="$(cat $log_file | cut -d " " -f 1,4-7 | egrep --color=always "c99.php|shell.php|shell=|exec=|cmd=|act=|whoami|pwd|base64|eval" | head -n 10 )"
+		query="$(cat $log_file | cut -d " " -f 1,4-7 | egrep --color=always "c99.php|shell.php|shell=|exec=|cmd=|act=|whoami|pwd|base64|eval|xmlrpc.php" | head -n 10 )"
 		if [ ! -z "$query" ]; then
 			echo -e "$(log_value "Potential Shells" "")"
 			echo "$query"
@@ -831,6 +831,18 @@ get_temp_files() {
 }
 
 # -----------------------------------------------------------
+# OPTIONAL FILES
+# -----------------------------------------------------------
+get_opt_files() {
+	echo $(log_header "OPT FILES")
+	echo
+
+	echo "$(ls -lh $MOUNT_POINT/opt)"
+
+	echo
+}
+
+# -----------------------------------------------------------
 # APACHE CONFIG
 # -----------------------------------------------------------
 get_apache_config() {
@@ -869,6 +881,7 @@ execute_all() {
 	get_command_history
 	get_user_files
 	get_temp_files
+	get_opt_files
 	get_backup_diff
 	get_installed_software
 	get_cron_jobs
